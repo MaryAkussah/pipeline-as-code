@@ -1,0 +1,39 @@
+version: 0.2
+
+env:
+  variables:
+    ARTIFACT_BUCKET: "<REPLACE_WITH_YOUR_BUCKET>" # Set in the CodeBuild project environment variables or replace here
+    S3_ARTIFACT_PREFIX: artifacts
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18
+    commands:
+      - echo Installing dependencies...
+      - npm --version
+  pre_build:
+    commands:
+      - echo Pre-build: run tests
+      - cd app
+      - npm ci
+      - npm test || true
+      - cd ..
+  build:
+    commands:
+      - echo Build: package app and CloudFormation
+      - cd app
+      - zip -r ../app.zip .   # create a zip with app files
+      - cd ..
+      - aws s3 cp app.zip s3://$ARTIFACT_BUCKET/$S3_ARTIFACT_PREFIX/app.zip
+      - echo Packaging CloudFormation template
+      - aws cloudformation package --template-file infra/app-stack.yaml --s3-bucket $ARTIFACT_BUCKET --output-template-file infra/packaged-app-stack.yaml
+  post_build:
+    commands:
+      - echo Build completed, listing artifacts:
+      - ls -la
+artifacts:
+  files:
+    - infra/packaged-app-stack.yaml
+    - app.zip
+  discard-paths: no
